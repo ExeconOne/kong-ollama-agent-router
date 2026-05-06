@@ -1,0 +1,43 @@
+_format_version: "3.0"
+
+services:
+  - name: ollama-node-router
+    url: http://127.0.0.1:11435
+    routes:
+      - name: ollama-chat
+        paths:
+          - /
+
+plugins:
+  - name: kong-ollama-router
+    service: ollama-node-router
+    config:
+      node_routers:
+        discovery: static
+        nodes:
+          - id: gex44-a
+            base_url: http://127.0.0.1:11435
+            weight: 100
+            tags:
+              - local
+        capabilities_path: /v1/router/capabilities
+        runtime_path: /v1/router/runtime
+        execute_path: /v1/router/execute
+        create_job_path: /v1/router/jobs
+        request_timeout_ms: 120000
+        snapshot_timeout_ms: 500
+        capabilities_cache_ttl_ms: 60000
+        runtime_cache_ttl_ms: 1000
+        stale_snapshot_ttl_ms: 5000
+        allow_degraded_snapshot: false
+      selection:
+        strategy: score
+        prefer_loaded_model: true
+        respect_node_weight: true
+        failover_on_execute_error: true
+        max_failover_attempts: 1
+      gateway_policy:
+        expose_diagnostics: false
+        allow_client_preferred_models: true
+        allow_client_forbidden_models: true
+        default_error_status: 503
