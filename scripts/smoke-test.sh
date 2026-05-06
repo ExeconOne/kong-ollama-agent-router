@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 KONG_IMAGE="${KONG_IMAGE:-kong:3.8}"
-KONG_CONTAINER="${KONG_CONTAINER:-kong-ollama-router-test}"
+KONG_CONTAINER="${KONG_CONTAINER:-kong-ollama-agent-router-test}"
 KONG_PROXY_URL="${KONG_PROXY_URL:-http://127.0.0.1:8000}"
 KONG_PROXY_PORT="${KONG_PROXY_PORT:-8000}"
 
@@ -85,7 +85,7 @@ services:
           - /
 
 plugins:
-  - name: kong-ollama-router
+  - name: kong-ollama-agent-router
     service: ollama-node-router
     config:
       node_routers:
@@ -163,12 +163,12 @@ docker run -d \
   -p "$KONG_PROXY_PORT:8000" \
   -e KONG_DATABASE=off \
   -e KONG_DECLARATIVE_CONFIG=/kong/declarative/kong.yml \
-  -e KONG_PLUGINS=bundled,kong-ollama-router \
+  -e KONG_PLUGINS=bundled,kong-ollama-agent-router \
   -e KONG_PROXY_LISTEN=0.0.0.0:8000 \
   -e KONG_ADMIN_LISTEN=off \
   -e KONG_STATUS_LISTEN=off \
   -e KONG_LOG_LEVEL=info \
-  -v "$ROOT_DIR/kong-plugin/kong/plugins/kong-ollama-router:/usr/local/share/lua/5.1/kong/plugins/kong-ollama-router:ro" \
+  -v "$ROOT_DIR/kong-plugin/kong/plugins/kong-ollama-agent-router:/usr/local/share/lua/5.1/kong/plugins/kong-ollama-agent-router:ro" \
   -v "$KONG_CONFIG:/kong/declarative/kong.yml:ro" \
   "$KONG_IMAGE" >/dev/null
 

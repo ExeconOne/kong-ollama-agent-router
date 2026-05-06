@@ -9,7 +9,7 @@ services:
           - /
 
 plugins:
-  - name: kong-ollama-router
+  - name: kong-ollama-agent-router
     service: ollama-node-router
     config:
       node_routers:

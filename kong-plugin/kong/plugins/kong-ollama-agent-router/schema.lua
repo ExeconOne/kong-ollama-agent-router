@@ -1,5 +1,5 @@
 return {
-  name = "kong-ollama-router",
+  name = "kong-ollama-agent-router",
   fields = {
     {
       config = {

@@ -1,4 +1,4 @@
-local engine = require "kong.plugins.kong-ollama-router.router_engine"
+local engine = require "kong.plugins.kong-ollama-agent-router.router_engine"
 
 local function model(name, opts)
   opts = opts or {}

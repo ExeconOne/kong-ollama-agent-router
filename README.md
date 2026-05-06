@@ -1,4 +1,4 @@
-# kong-ollama-router
+# kong-ollama-agent-router
 
 Kong custom plugin for routing OpenAI-compatible chat completion requests to one or more `ollama-node-router` runtime agents.
 
@@ -7,7 +7,7 @@ The plugin owns public gateway behavior and routing decisions. Each `ollama-node
 ## Layout
 
 ```text
-kong-plugin/kong/plugins/kong-ollama-router/
+kong-plugin/kong/plugins/kong-ollama-agent-router/
   handler.lua
   schema.lua
   classifier.lua
@@ -67,7 +67,7 @@ Use `KEEP_RUNNING=1 make smoke` to leave the Kong container and any node-router 
 
 ```yaml
 plugins:
-  - name: kong-ollama-router
+  - name: kong-ollama-agent-router
     config:
       node_routers:
         discovery: static

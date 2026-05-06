@@ -1,7 +1,7 @@
 package.path = table.concat({
   "./kong-plugin/?.lua",
   "./kong-plugin/?/init.lua",
-  "./kong-plugin/kong/plugins/kong-ollama-router/?.lua",
+  "./kong-plugin/kong/plugins/kong-ollama-agent-router/?.lua",
   "./spec/?.lua",
   package.path,
 }, ";")

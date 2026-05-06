@@ -1,4 +1,4 @@
-local classifier = require "kong.plugins.kong-ollama-router.classifier"
+local classifier = require "kong.plugins.kong-ollama-agent-router.classifier"
 
 local function request(content)
   return {

@@ -1,7 +1,7 @@
-local classifier = require "kong.plugins.kong-ollama-router.classifier"
-local router_engine = require "kong.plugins.kong-ollama-router.router_engine"
-local NodeRouterClient = require "kong.plugins.kong-ollama-router.node_router_client"
-local response = require "kong.plugins.kong-ollama-router.response"
+local classifier = require "kong.plugins.kong-ollama-agent-router.classifier"
+local router_engine = require "kong.plugins.kong-ollama-agent-router.router_engine"
+local NodeRouterClient = require "kong.plugins.kong-ollama-agent-router.node_router_client"
+local response = require "kong.plugins.kong-ollama-agent-router.response"
 
 local KongOllamaRouterHandler = {
   VERSION = "0.1.0",
@@ -61,7 +61,7 @@ local function public_status(client)
   if not nodes then
     return nil, err
   end
-  local result = { service = "kong-ollama-router", nodes = {} }
+  local result = { service = "kong-ollama-agent-router", nodes = {} }
   for _, node in ipairs(nodes) do
     result.nodes[#result.nodes + 1] = {
       id = node.id,
@@ -84,7 +84,7 @@ function KongOllamaRouterHandler:access(conf)
   local client = NodeRouterClient.new(conf)
 
   if path == "/health" then
-    return kong.response.exit(200, { status = "ok", service = "kong-ollama-router" })
+    return kong.response.exit(200, { status = "ok", service = "kong-ollama-agent-router" })
   end
 
   if method == "GET" and (path == "/v1/router/status" or path == "/v1/router/models" or path == "/v1/router/gpu") then
@@ -110,7 +110,7 @@ function KongOllamaRouterHandler:access(conf)
 
   local request = kong.request.get_body() or {}
   if request.stream then
-    return kong.response.exit(400, error_body("Streaming is not supported by kong-ollama-router v1"))
+    return kong.response.exit(400, error_body("Streaming is not supported by kong-ollama-agent-router v1"))
   end
   if type(request.messages) ~= "table" or #request.messages == 0 then
     return kong.response.exit(400, error_body("messages must be a non-empty array"))

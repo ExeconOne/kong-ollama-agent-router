@@ -1,8 +1,8 @@
-# HLD: Kong Ollama Router
+# HLD: Kong Ollama Agent Router
 
 ## 1. Cel systemu
 
-Projekt: **`kong-ollama-router`**
+Projekt: **`kong-ollama-agent-router`**
 
 Rozwiazanie sklada sie z dwoch klockow:
 
@@ -12,7 +12,7 @@ Rozwiazanie sklada sie z dwoch klockow:
    Jest lokalnym agentem runtime: widzi maszyne, GPU, Ollama, zaladowane modele,
    kolejki, running counters i obciazenie.
 
-2. kong-ollama-router plugin
+2. kong-ollama-agent-router plugin
    Plugin do Kong API Gateway. Jest warstwa wejscia i decyzji routingowej.
    Ma logike `ollama-agent-router`: klasyfikuje request, wybiera model,
    decyduje sync/async/reject i wzbogaca odpowiedz o metadane routera.
@@ -66,7 +66,7 @@ Client / Agent / App
 Kong Gateway
         |
         v
-kong-ollama-router plugin
+kong-ollama-agent-router plugin
         |
         +--> Request validator
         +--> Task classifier
@@ -610,7 +610,7 @@ Przyklad:
 
 ```yaml
 plugins:
-  - name: kong-ollama-router
+  - name: kong-ollama-agent-router
     service: ollama-node-router
     config:
       node_routers:
@@ -826,7 +826,7 @@ Praktyczne zasady:
 
 ```text
 1. Klient wysyla POST /v1/chat/completions do Konga.
-2. Kong uruchamia `kong-ollama-router` w fazie access.
+2. Kong uruchamia `kong-ollama-agent-router` w fazie access.
 3. Plugin waliduje body i odrzuca stream=true w v1.
 4. Plugin normalizuje router metadata.
 5. Plugin klasyfikuje zadanie albo respektuje jawny taskType.
@@ -1002,7 +1002,7 @@ Na warstwie gateway:
 
 ```text
 kong-gateway
-kong-ollama-router plugin
+kong-ollama-agent-router plugin
 ```
 
 Kong moze dzialac na tej samej maszynie, na innym hoscie, w Dockerze albo w Kubernetes. W kazdym wariancie musi miec sieciowy dostep do `ollama-node-router`.
@@ -1011,7 +1011,7 @@ Kong moze dzialac na tej samej maszynie, na innym hoscie, w Dockerze albo w Kube
 
 ```text
 client
-  -> kong-gateway + kong-ollama-router plugin
+  -> kong-gateway + kong-ollama-agent-router plugin
   -> ollama-node-router
   -> ollama
   -> GPU/CPU
@@ -1102,13 +1102,13 @@ Loaded models snapshot stale:
 Proponowana struktura:
 
 ```text
-kong-ollama-router/
+kong-ollama-agent-router/
   README.md
   HLD.md
   kong-plugin/
     kong/
       plugins/
-        kong-ollama-router/
+        kong-ollama-agent-router/
           handler.lua
           schema.lua
           access.lua
@@ -1191,7 +1191,7 @@ ollama-node-router/
 
 ```text
 1. Rozwiazanie sklada sie operacyjnie z dwoch klockow:
-   `kong-ollama-router` plugin i `ollama-node-router`.
+   `kong-ollama-agent-router` plugin i `ollama-node-router`.
 2. Plugin nie pobiera bezposrednio danych GPU/Ollama z maszyny.
 3. Plugin podejmuje decyzje routingu na podstawie konfiguracji i snapshotu
    z `ollama-node-router`.
