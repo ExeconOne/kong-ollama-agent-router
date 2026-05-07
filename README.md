@@ -6,10 +6,10 @@ The plugin owns public gateway behavior and routing decisions at the Kong layer.
 
 ## Requirements
 
-- Kong Gateway 3.8 or newer. The local smoke test currently uses `kong:3.8`.
+- Kong Gateway 3.8+ (also [Kong Gateway Community Edition](https://github.com/ExeconOne/kong-oss-community-edition) ). The local smoke test currently uses `kong:3.8`.
 - Lua 5.1 / LuaJIT, as used by Kong/OpenResty.
 - LuaRocks 3.x for local package builds.
-- Runtime node-router service: `ollama-agent-router`.
+- Runtime node-router service: [`ollama-agent-router`](https://www.npmjs.com/package/ollama-agent-router) .
 
 ## Installation
 
