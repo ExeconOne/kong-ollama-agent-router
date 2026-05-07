@@ -1,0 +1,68 @@
+name: Release to LuaRocks
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
+
+jobs:
+  luarocks:
+    if: ${{ github.ref_type == 'tag' && github.event.created == true && github.event.deleted == false }}
+    runs-on: ubuntu-latest
+    concurrency:
+      group: luarocks-${{ github.ref }}
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Lua 5.1
+        uses: leafo/gh-actions-lua@v11
+        with:
+          luaVersion: "5.1"
+
+      - name: Setup LuaRocks
+        uses: leafo/gh-actions-luarocks@v5
+
+      - name: Verify release version
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          case "$TAG_VERSION" in
+            *[!0-9.]*|.*|*..*|*.)
+              echo "Release tag must use vX.Y.Z SemVer format, got: ${GITHUB_REF_NAME}" >&2
+              exit 1
+              ;;
+          esac
+          IFS=. read -r MAJOR MINOR PATCH EXTRA <<< "$TAG_VERSION"
+          test -n "$MAJOR" && test -n "$MINOR" && test -n "$PATCH" && test -z "${EXTRA:-}"
+          ./scripts/check-version.sh "$TAG_VERSION"
+
+      - name: Lint, test, and build rock
+        run: |
+          make lint
+          make test
+          make build-rock
+          make pack-source-rock
+
+      - name: Upload rock artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: luarocks-package
+          path: |
+            kong-plugin-ollama-agent-router-*.rockspec
+            kong-plugin-ollama-agent-router-*.rock
+
+      - name: Publish to LuaRocks
+        env:
+          # Set this in GitHub repository settings:
+          # Settings -> Secrets and variables -> Actions -> New repository secret.
+          LUAROCKS_API_KEY: ${{ secrets.LUAROCKS_API_KEY }}
+        run: |
+          test -n "$LUAROCKS_API_KEY"
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          ROCKSPEC="kong-plugin-ollama-agent-router-${TAG_VERSION}-1.rockspec"
+          luarocks upload "$ROCKSPEC" --temp-key "$LUAROCKS_API_KEY"

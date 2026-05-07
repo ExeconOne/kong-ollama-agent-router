@@ -30,9 +30,17 @@ function assert_match(value, pattern, message)
   end
 end
 
+function assert_type(value, expected, message)
+  local actual = type(value)
+  if actual ~= expected then
+    error((message or "type mismatch") .. ": expected " .. tostring(expected) .. ", got " .. tostring(actual), 2)
+  end
+end
+
 local specs = {
   "spec.unit.classifier_spec",
   "spec.unit.router_engine_spec",
+  "spec.unit.plugin_contract_spec",
 }
 
 for _, spec in ipairs(specs) do

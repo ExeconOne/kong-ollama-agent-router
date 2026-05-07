@@ -1,4 +1,8 @@
-.PHONY: test syntax smoke
+.PHONY: lint test syntax smoke rockspec-lint build-rock pack-source-rock install-local version-check release-patch
+
+ROCKSPEC := kong-plugin-ollama-agent-router-$(shell tr -d '[:space:]' < VERSION)-1.rockspec
+
+lint: syntax version-check rockspec-lint
 
 test:
 	lua scripts/test.lua
@@ -6,5 +10,23 @@ test:
 syntax:
 	luac -p kong-plugin/kong/plugins/kong-ollama-agent-router/*.lua
 
+version-check:
+	bash scripts/check-version.sh
+
+rockspec-lint:
+	luarocks lint $(ROCKSPEC)
+
+build-rock:
+	luarocks make --deps-mode=none --pack-binary-rock $(ROCKSPEC)
+
+pack-source-rock:
+	luarocks pack $(ROCKSPEC)
+
+install-local:
+	luarocks --local make --deps-mode=none $(ROCKSPEC)
+
 smoke:
 	bash scripts/smoke-test.sh
+
+release-patch:
+	bash scripts/release.sh patch
