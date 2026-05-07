@@ -182,13 +182,40 @@ Bump the version:
 ./scripts/bump-version.sh 1.0.0
 ```
 
-Patch release helper:
+## Building a New Version
+
+Use the release helper for normal releases:
+
+```bash
+./scripts/release.sh
+```
+
+The default is a patch release. For example, if `VERSION` contains `0.1.0`, this creates `0.1.1`.
+
+Explicit release modes:
 
 ```bash
 ./scripts/release.sh patch
+./scripts/release.sh minor
+./scripts/release.sh major
+./scripts/release.sh 1.0.0
 ```
 
-This computes the next patch version from `VERSION`, runs checks, commits `Release vX.Y.Z`, tags `vX.Y.Z`, and pushes the current branch plus tags to `origin`. Use `minor`, `major`, or an explicit `X.Y.Z` instead of `patch` when needed.
+The script requires a clean git working tree, then:
+
+1. reads the current version from `VERSION`,
+2. computes the next version,
+3. runs `./scripts/bump-version.sh X.Y.Z`,
+4. runs `make lint`, `make test`, and `make build-rock`,
+5. commits `Release vX.Y.Z`,
+6. tags `vX.Y.Z`,
+7. pushes the current branch and tags to `origin`.
+
+If you need to force the branch name used during push:
+
+```bash
+RELEASE_BRANCH=main ./scripts/release.sh patch
+```
 
 ## Publishing to LuaRocks
 
@@ -199,7 +226,13 @@ Before the first release:
 3. Generate an API key in the LuaRocks account settings.
 4. Add the key to GitHub repository secrets as `LUAROCKS_API_KEY`.
 
-Release flow:
+Preferred release flow:
+
+```bash
+./scripts/release.sh patch
+```
+
+Manual equivalent:
 
 ```bash
 ./scripts/bump-version.sh 1.0.0
