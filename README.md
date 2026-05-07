@@ -195,7 +195,7 @@ Current version is stored in:
 
 - `VERSION`
 - `kong-plugin/kong/plugins/kong-ollama-agent-router/handler.lua`
-- `kong-plugin-ollama-agent-router-0.1.1-1.rockspec`
+- `kong-plugin-ollama-agent-router-0.1.2-1.rockspec`
 
 Check consistency:
 
@@ -248,7 +248,7 @@ RELEASE_BRANCH=main ./scripts/release.sh patch
 
 Before the first release:
 
-1. Confirm the public GitHub repository URL in `kong-plugin-ollama-agent-router-0.1.1-1.rockspec`.
+1. Confirm the public GitHub repository URL in `kong-plugin-ollama-agent-router-0.1.2-1.rockspec`.
 2. Create a LuaRocks account at `https://luarocks.org`.
 3. Generate an API key in the LuaRocks account settings.
 4. Add the key to GitHub repository secrets as `LUAROCKS_API_KEY`.
