@@ -139,12 +139,35 @@ make rockspec-lint
 make build-rock
 make pack-source-rock
 make install-local
+make smoke
+make smoke-luarocks
 ```
 
 End-to-end smoke test with Kong OSS in Docker, a local `ollama-agent-router`, and local Ollama:
 
 ```bash
 make smoke
+```
+
+By default, `make smoke` mounts the plugin source from this repository into the Kong container. To test the published LuaRocks package instead:
+
+```bash
+make smoke-luarocks
+```
+
+This builds a temporary Docker image based on `KONG_IMAGE`, runs `luarocks install kong-plugin-ollama-agent-router <version>`, then starts Kong from that image. The default LuaRocks version is derived from `VERSION` as `<VERSION>-1`, for example `0.1.1-1`.
+
+The default LuaRocks manifest is the published module namespace:
+
+```text
+https://luarocks.org/modules/grulka/kong-plugin-ollama-agent-router
+```
+
+Override the installed package or version:
+
+```bash
+LUAROCKS_VERSION=0.1.1-1 make smoke-luarocks
+LUAROCKS_PACKAGE=kong-plugin-ollama-agent-router LUAROCKS_VERSION=0.1.1-1 make smoke-luarocks
 ```
 
 Defaults:
@@ -156,6 +179,10 @@ NODE_ROUTER_URL=http://127.0.0.1:11435
 NODE_ROUTER_CONFIG=../ollama-node-router/ollama-agent-router.yaml
 OLLAMA_URL=http://127.0.0.1:11434
 SMOKE_MODEL=qwen2.5-coder:7b
+PLUGIN_INSTALL_MODE=local
+LUAROCKS_PACKAGE=kong-plugin-ollama-agent-router
+LUAROCKS_VERSION=<VERSION>-1
+LUAROCKS_SERVER=https://luarocks.org/manifests/grulka
 ```
 
 Use `KEEP_RUNNING=1 make smoke` to leave the Kong container and any node-router process started by the script running after the test.

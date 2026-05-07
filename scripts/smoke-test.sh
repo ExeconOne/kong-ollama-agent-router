@@ -4,9 +4,23 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 KONG_IMAGE="${KONG_IMAGE:-kong:3.8}"
-KONG_CONTAINER="${KONG_CONTAINER:-kong-ollama-agent-router-test}"
 KONG_PROXY_URL="${KONG_PROXY_URL:-http://127.0.0.1:8000}"
 KONG_PROXY_PORT="${KONG_PROXY_PORT:-8000}"
+
+PLUGIN_INSTALL_MODE="${PLUGIN_INSTALL_MODE:-local}"
+LUAROCKS_PACKAGE="${LUAROCKS_PACKAGE:-kong-plugin-ollama-agent-router}"
+LUAROCKS_VERSION="${LUAROCKS_VERSION:-$(tr -d '[:space:]' < "$ROOT_DIR/VERSION")-1}"
+LUAROCKS_SERVER="${LUAROCKS_SERVER:-https://luarocks.org/manifests/grulka}"
+LUAROCKS_ROCKSPEC_URL="${LUAROCKS_ROCKSPEC_URL:-}"
+KONG_LUAROCKS_IMAGE="${KONG_LUAROCKS_IMAGE:-kong-ollama-agent-router-luarocks:$LUAROCKS_VERSION}"
+
+if [[ -z "${KONG_CONTAINER:-}" ]]; then
+  if [[ "$PLUGIN_INSTALL_MODE" == "luarocks" ]]; then
+    KONG_CONTAINER="kong-ollama-agent-router-luarocks-test"
+  else
+    KONG_CONTAINER="kong-ollama-agent-router-test"
+  fi
+fi
 
 NODE_ROUTER_URL="${NODE_ROUTER_URL:-http://127.0.0.1:11435}"
 NODE_ROUTER_DOCKER_URL="${NODE_ROUTER_DOCKER_URL:-http://host.docker.internal:11435}"
@@ -121,11 +135,54 @@ YAML
   printf '%s\n' "$target"
 }
 
+build_luarocks_kong_image() {
+  local build_dir="$ROOT_DIR/.tmp/kong-luarocks-image"
+  mkdir -p "$build_dir"
+  cat > "$build_dir/Dockerfile" <<'DOCKERFILE'
+ARG KONG_IMAGE=kong:3.8
+FROM ${KONG_IMAGE}
+
+ARG LUAROCKS_PACKAGE=kong-plugin-ollama-agent-router
+ARG LUAROCKS_VERSION=
+ARG LUAROCKS_SERVER=https://luarocks.org/manifests/grulka
+ARG LUAROCKS_ROCKSPEC_URL=
+
+USER root
+RUN if [ -n "$LUAROCKS_ROCKSPEC_URL" ]; then \
+      luarocks install --deps-mode=none "$LUAROCKS_ROCKSPEC_URL"; \
+    elif [ -n "$LUAROCKS_VERSION" ]; then \
+      luarocks --only-server "$LUAROCKS_SERVER" install --deps-mode=none "$LUAROCKS_PACKAGE" "$LUAROCKS_VERSION"; \
+    else \
+      luarocks --only-server "$LUAROCKS_SERVER" install --deps-mode=none "$LUAROCKS_PACKAGE"; \
+    fi
+USER kong
+DOCKERFILE
+
+  if [[ -n "$LUAROCKS_ROCKSPEC_URL" ]]; then
+    log "Building Kong image with $LUAROCKS_ROCKSPEC_URL from LuaRocks"
+  else
+    log "Building Kong image with $LUAROCKS_PACKAGE $LUAROCKS_VERSION from $LUAROCKS_SERVER"
+  fi
+  docker build \
+    --build-arg "KONG_IMAGE=$KONG_IMAGE" \
+    --build-arg "LUAROCKS_PACKAGE=$LUAROCKS_PACKAGE" \
+    --build-arg "LUAROCKS_VERSION=$LUAROCKS_VERSION" \
+    --build-arg "LUAROCKS_SERVER=$LUAROCKS_SERVER" \
+    --build-arg "LUAROCKS_ROCKSPEC_URL=$LUAROCKS_ROCKSPEC_URL" \
+    -t "$KONG_LUAROCKS_IMAGE" \
+    "$build_dir" >/dev/null
+}
+
 log "Checking prerequisites"
 need_cmd curl
 need_cmd docker
 need_cmd node
 need_cmd ollama-agent-router
+
+case "$PLUGIN_INSTALL_MODE" in
+  local|luarocks) ;;
+  *) fail "PLUGIN_INSTALL_MODE must be local or luarocks, got: $PLUGIN_INSTALL_MODE" ;;
+esac
 
 log "Checking Ollama at $OLLAMA_URL"
 if ! curl -fsS "$OLLAMA_URL/api/tags" >/dev/null; then
@@ -158,19 +215,37 @@ KONG_CONFIG="$(write_local_kong_config)"
 docker pull "$KONG_IMAGE" >/dev/null
 docker rm -f "$KONG_CONTAINER" >/dev/null 2>&1 || true
 
-docker run -d \
-  --name "$KONG_CONTAINER" \
-  -p "$KONG_PROXY_PORT:8000" \
-  -e KONG_DATABASE=off \
-  -e KONG_DECLARATIVE_CONFIG=/kong/declarative/kong.yml \
-  -e KONG_PLUGINS=bundled,kong-ollama-agent-router \
-  -e KONG_PROXY_LISTEN=0.0.0.0:8000 \
-  -e KONG_ADMIN_LISTEN=off \
-  -e KONG_STATUS_LISTEN=off \
-  -e KONG_LOG_LEVEL=info \
-  -v "$ROOT_DIR/kong-plugin/kong/plugins/kong-ollama-agent-router:/usr/local/share/lua/5.1/kong/plugins/kong-ollama-agent-router:ro" \
-  -v "$KONG_CONFIG:/kong/declarative/kong.yml:ro" \
-  "$KONG_IMAGE" >/dev/null
+KONG_RUN_IMAGE="$KONG_IMAGE"
+if [[ "$PLUGIN_INSTALL_MODE" == "luarocks" ]]; then
+  build_luarocks_kong_image
+  KONG_RUN_IMAGE="$KONG_LUAROCKS_IMAGE"
+  docker run -d \
+    --name "$KONG_CONTAINER" \
+    -p "$KONG_PROXY_PORT:8000" \
+    -e KONG_DATABASE=off \
+    -e KONG_DECLARATIVE_CONFIG=/kong/declarative/kong.yml \
+    -e KONG_PLUGINS=bundled,kong-ollama-agent-router \
+    -e KONG_PROXY_LISTEN=0.0.0.0:8000 \
+    -e KONG_ADMIN_LISTEN=off \
+    -e KONG_STATUS_LISTEN=off \
+    -e KONG_LOG_LEVEL=info \
+    -v "$KONG_CONFIG:/kong/declarative/kong.yml:ro" \
+    "$KONG_RUN_IMAGE" >/dev/null
+else
+  docker run -d \
+    --name "$KONG_CONTAINER" \
+    -p "$KONG_PROXY_PORT:8000" \
+    -e KONG_DATABASE=off \
+    -e KONG_DECLARATIVE_CONFIG=/kong/declarative/kong.yml \
+    -e KONG_PLUGINS=bundled,kong-ollama-agent-router \
+    -e KONG_PROXY_LISTEN=0.0.0.0:8000 \
+    -e KONG_ADMIN_LISTEN=off \
+    -e KONG_STATUS_LISTEN=off \
+    -e KONG_LOG_LEVEL=info \
+    -v "$ROOT_DIR/kong-plugin/kong/plugins/kong-ollama-agent-router:/usr/local/share/lua/5.1/kong/plugins/kong-ollama-agent-router:ro" \
+    -v "$KONG_CONFIG:/kong/declarative/kong.yml:ro" \
+    "$KONG_RUN_IMAGE" >/dev/null
+fi
 
 wait_http "$KONG_PROXY_URL/health" "Kong proxy" 45
 
@@ -239,5 +314,14 @@ if (data.choices?.[0]?.message?.content?.trim() !== "ASYNC_OK") process.exit(6);
 
 log "Smoke test passed"
 printf 'Kong container: %s\n' "$KONG_CONTAINER"
+printf 'Plugin install mode: %s\n' "$PLUGIN_INSTALL_MODE"
+if [[ "$PLUGIN_INSTALL_MODE" == "luarocks" ]]; then
+  printf 'Kong LuaRocks image: %s\n' "$KONG_LUAROCKS_IMAGE"
+  printf 'LuaRocks package: %s %s\n' "$LUAROCKS_PACKAGE" "$LUAROCKS_VERSION"
+  printf 'LuaRocks server: %s\n' "$LUAROCKS_SERVER"
+  if [[ -n "$LUAROCKS_ROCKSPEC_URL" ]]; then
+    printf 'LuaRocks rockspec URL: %s\n' "$LUAROCKS_ROCKSPEC_URL"
+  fi
+fi
 printf 'Kong URL: %s\n' "$KONG_PROXY_URL"
 printf 'Node-router URL: %s\n' "$NODE_ROUTER_URL"
