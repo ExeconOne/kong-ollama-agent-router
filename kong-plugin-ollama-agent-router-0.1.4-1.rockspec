@@ -1,9 +1,9 @@
 package = "kong-plugin-ollama-agent-router"
-version = "0.1.3-1"
+version = "0.1.4-1"
 
 source = {
   url = "git+https://github.com/ExeconOne/kong-ollama-agent-router.git",
-  tag = "v0.1.3",
+  tag = "v0.1.4",
 }
 
 description = {
