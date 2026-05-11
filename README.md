@@ -124,10 +124,10 @@ Model specs, routes, GPU policy, queue policy, and job policy are not duplicated
 
 The recommended setup is:
 
-1. Configure the node-router `runtimeAgent` plane with `requireApiKey: true`.
+1. Configure the node-router [Ollama Agent Router](https://www.npmjs.com/package/ollama-agent-router) `runtimeAgent` plane with `requireApiKey: true`.
 2. Create one API key scoped only to `runtimeAgent`.
 3. Configure this plugin with that key under `node_routers.security.auth`.
-4. Keep the node-router `standalone` plane disabled if all public traffic goes through Kong.
+4. Keep the node-router [Ollama Agent Router](https://www.npmjs.com/package/ollama-agent-router) `standalone` plane disabled if all public traffic goes through Kong.
 
 Node-router access config example:
 
