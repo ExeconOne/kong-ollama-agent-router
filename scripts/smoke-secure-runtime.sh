@@ -111,7 +111,6 @@ router:
   defaultTaskType: unknown
   classification:
     mode: heuristic
-    optionalClassifierModel:
     classifierTimeoutMs: 1500
 jobs:
   store: memory

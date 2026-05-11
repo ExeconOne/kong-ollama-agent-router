@@ -64,6 +64,7 @@ it("keeps node-router security disabled by default for backwards compatibility",
   assert_type(tls, "table", "node_routers.security.tls schema is missing")
   assert_equal(find_named_field(auth.fields, "type").default, "none")
   assert_equal(find_named_field(auth.fields, "type").one_of[2], "bearer")
+  assert_equal(find_named_field(auth.fields, "header_prefix").default, nil)
   assert_equal(find_named_field(tls.fields, "verify").default, true)
 end)
 

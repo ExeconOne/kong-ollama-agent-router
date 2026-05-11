@@ -2,7 +2,7 @@ _format_version: "3.0"
 
 services:
   - name: ollama-node-router
-    url: http://host.docker.internal:11435
+    url: http://host.docker.internal:11436
     routes:
       - name: ollama-router-all
         paths:
@@ -14,9 +14,15 @@ plugins:
     config:
       node_routers:
         discovery: static
+        security:
+          auth:
+            type: bearer
+            token: "secure-runtime-smoke-1778480732-28936"
+          tls:
+            verify: true
         nodes:
           - id: local
-            base_url: http://host.docker.internal:11435
+            base_url: http://host.docker.internal:11436
             weight: 100
             tags:
               - local

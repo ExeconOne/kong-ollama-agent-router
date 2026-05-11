@@ -103,6 +103,10 @@ wait_node_router() {
   started="$(date +%s)"
   until node_router_curl "$url" >/dev/null 2>&1; do
     if (( "$(date +%s)" - started > timeout )); then
+      if [[ -f "$ROOT_DIR/.tmp/ollama-agent-router.log" ]]; then
+        printf '\nLast node-router log lines:\n' >&2
+        tail -n 80 "$ROOT_DIR/.tmp/ollama-agent-router.log" >&2 || true
+      fi
       fail "Timed out waiting for $label at $url"
     fi
     sleep 1
