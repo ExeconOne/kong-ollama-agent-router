@@ -23,6 +23,80 @@ return {
                         { base_url = { type = "string", required = true } },
                         { weight = { type = "number", default = 0 } },
                         { tags = { type = "array", elements = { type = "string" }, default = {} } },
+                        {
+                          auth = {
+                            type = "record",
+                            required = false,
+                            fields = {
+                              { type = { type = "string", default = "none", one_of = { "none", "bearer", "header" } } },
+                              { token = { type = "string", required = false } },
+                              { header_name = { type = "string", default = "x-api-key" } },
+                              { header_prefix = { type = "string", default = "" } },
+                            },
+                          },
+                        },
+                        {
+                          tls = {
+                            type = "record",
+                            required = false,
+                            fields = {
+                              { verify = { type = "boolean", default = true } },
+                              { server_name = { type = "string", required = false } },
+                              {
+                                client_cert = {
+                                  type = "record",
+                                  required = false,
+                                  fields = {
+                                    { enabled = { type = "boolean", default = false } },
+                                    { cert_path = { type = "string", required = false } },
+                                    { key_path = { type = "string", required = false } },
+                                  },
+                                },
+                              },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+                {
+                  security = {
+                    type = "record",
+                    required = false,
+                    fields = {
+                      {
+                        auth = {
+                          type = "record",
+                          required = false,
+                          fields = {
+                            { type = { type = "string", default = "none", one_of = { "none", "bearer", "header" } } },
+                            { token = { type = "string", required = false } },
+                            { header_name = { type = "string", default = "x-api-key" } },
+                            { header_prefix = { type = "string", default = "" } },
+                          },
+                        },
+                      },
+                      {
+                        tls = {
+                          type = "record",
+                          required = false,
+                          fields = {
+                            { verify = { type = "boolean", default = true } },
+                            { server_name = { type = "string", required = false } },
+                            {
+                              client_cert = {
+                                type = "record",
+                                required = false,
+                                fields = {
+                                  { enabled = { type = "boolean", default = false } },
+                                  { cert_path = { type = "string", required = false } },
+                                  { key_path = { type = "string", required = false } },
+                                },
+                              },
+                            },
+                          },
+                        },
                       },
                     },
                   },

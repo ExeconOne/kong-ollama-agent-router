@@ -14,6 +14,11 @@ plugins:
     config:
       node_routers:
         discovery: static
+        security:
+          auth:
+            type: none
+          tls:
+            verify: true
         nodes:
           - id: gex44-a
             base_url: http://127.0.0.1:11435

@@ -25,6 +25,8 @@ fi
 NODE_ROUTER_URL="${NODE_ROUTER_URL:-http://127.0.0.1:11435}"
 NODE_ROUTER_DOCKER_URL="${NODE_ROUTER_DOCKER_URL:-http://host.docker.internal:11435}"
 NODE_ROUTER_CONFIG="${NODE_ROUTER_CONFIG:-$ROOT_DIR/../ollama-node-router/ollama-agent-router.yaml}"
+NODE_ROUTER_RUNTIME_API_KEY="${NODE_ROUTER_RUNTIME_API_KEY:-}"
+NODE_ROUTER_EXPECT_STANDALONE_DISABLED="${NODE_ROUTER_EXPECT_STANDALONE_DISABLED:-0}"
 
 OLLAMA_URL="${OLLAMA_URL:-http://127.0.0.1:11434}"
 SMOKE_MODEL="${SMOKE_MODEL:-qwen2.5-coder:7b}"
@@ -84,8 +86,52 @@ wait_http() {
   done
 }
 
+node_router_curl() {
+  local url="$1"
+  if [[ -n "$NODE_ROUTER_RUNTIME_API_KEY" ]]; then
+    curl -fsS -H "authorization: Bearer $NODE_ROUTER_RUNTIME_API_KEY" "$url"
+  else
+    curl -fsS "$url"
+  fi
+}
+
+wait_node_router() {
+  local url="$1"
+  local label="$2"
+  local timeout="${3:-30}"
+  local started
+  started="$(date +%s)"
+  until node_router_curl "$url" >/dev/null 2>&1; do
+    if (( "$(date +%s)" - started > timeout )); then
+      fail "Timed out waiting for $label at $url"
+    fi
+    sleep 1
+  done
+}
+
 write_local_kong_config() {
   local target="$ROOT_DIR/.tmp/kong-smoke.yml"
+  local security_yaml
+  if [[ -n "$NODE_ROUTER_RUNTIME_API_KEY" ]]; then
+    security_yaml=$(cat <<YAML
+        security:
+          auth:
+            type: bearer
+            token: "$NODE_ROUTER_RUNTIME_API_KEY"
+          tls:
+            verify: true
+YAML
+)
+  else
+    security_yaml=$(cat <<'YAML'
+        security:
+          auth:
+            type: none
+          tls:
+            verify: true
+YAML
+)
+  fi
   mkdir -p "$ROOT_DIR/.tmp"
   cat > "$target" <<YAML
 _format_version: "3.0"
@@ -104,6 +150,7 @@ plugins:
     config:
       node_routers:
         discovery: static
+$security_yaml
         nodes:
           - id: local
             base_url: $NODE_ROUTER_DOCKER_URL
@@ -194,18 +241,37 @@ if ! curl -fsS "$OLLAMA_URL/api/tags" | grep -q "\"name\":\"$SMOKE_MODEL\""; the
 fi
 
 log "Checking ollama-node-router at $NODE_ROUTER_URL"
-if curl -fsS "$NODE_ROUTER_URL/v1/router/capabilities" >/dev/null 2>&1; then
+if node_router_curl "$NODE_ROUTER_URL/v1/router/capabilities" >/dev/null 2>&1; then
   log "Using already running node-router"
 else
   [[ -f "$NODE_ROUTER_CONFIG" ]] || fail "Node-router config not found: $NODE_ROUTER_CONFIG"
   log "Starting ollama-agent-router with $NODE_ROUTER_CONFIG"
   ollama-agent-router serve --config "$NODE_ROUTER_CONFIG" > "$ROOT_DIR/.tmp/ollama-agent-router.log" 2>&1 &
   NODE_ROUTER_PID="$!"
-  wait_http "$NODE_ROUTER_URL/v1/router/capabilities" "ollama-node-router" 30
+  wait_node_router "$NODE_ROUTER_URL/v1/router/capabilities" "ollama-node-router" 30
+fi
+
+if [[ -n "$NODE_ROUTER_RUNTIME_API_KEY" ]]; then
+  log "Checking node-router runtime-agent API key enforcement"
+  UNAUTH_STATUS="$(curl -sS -o /dev/null -w '%{http_code}' "$NODE_ROUTER_URL/v1/router/capabilities")"
+  if [[ "$UNAUTH_STATUS" != "401" ]]; then
+    fail "Expected unauthenticated runtime-agent request to return 401, got $UNAUTH_STATUS"
+  fi
+  node_router_curl "$NODE_ROUTER_URL/v1/router/capabilities" >/dev/null
+fi
+
+if [[ "$NODE_ROUTER_EXPECT_STANDALONE_DISABLED" == "1" ]]; then
+  log "Checking node-router standalone plane is disabled"
+  STANDALONE_STATUS="$(curl -sS -o /dev/null -w '%{http_code}' "$NODE_ROUTER_URL/v1/chat/completions" \
+    -H 'content-type: application/json' \
+    -d "{\"model\":\"auto\",\"messages\":[{\"role\":\"user\",\"content\":\"This should not be accepted directly\"}],\"stream\":false}")"
+  if [[ "$STANDALONE_STATUS" != "404" ]]; then
+    fail "Expected direct standalone request to return 404, got $STANDALONE_STATUS"
+  fi
 fi
 
 log "Node-router capabilities"
-curl -fsS "$NODE_ROUTER_URL/v1/router/capabilities" | node -e '
+node_router_curl "$NODE_ROUTER_URL/v1/router/capabilities" | node -e '
 const data = JSON.parse(require("fs").readFileSync(0, "utf8"));
 console.log(JSON.stringify({ nodeId: data.nodeId, status: data.status, version: data.version, models: data.models.map((m) => m.name) }, null, 2));
 '

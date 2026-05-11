@@ -71,6 +71,11 @@ plugins:
     config:
       node_routers:
         discovery: static
+        security:
+          auth:
+            type: none
+          tls:
+            verify: true
         nodes:
           - id: local
             base_url: http://127.0.0.1:11435
@@ -113,6 +118,118 @@ curl -sS -X POST http://127.0.0.1:8001/services/ollama-node-router/plugins \
 
 Model specs, routes, GPU policy, queue policy, and job policy are not duplicated in Kong config. They are fetched from each node-router through `/v1/router/capabilities`.
 
+## Securing the Runtime Agent Connection
+
+`ollama-agent-router` can protect its runtime-agent plane with API keys and traffic limits. In that mode, the Kong plugin must authenticate to the node-router when calling `/v1/router/*` and `/v1/jobs/*`.
+
+The recommended setup is:
+
+1. Configure the node-router `runtimeAgent` plane with `requireApiKey: true`.
+2. Create one API key scoped only to `runtimeAgent`.
+3. Configure this plugin with that key under `node_routers.security.auth`.
+4. Keep the node-router `standalone` plane disabled if all public traffic goes through Kong.
+
+Node-router access config example:
+
+```yaml
+access:
+  managedConfigPath: ./ollama-agent-router.access.yaml
+  bootstrapIfMissing: true
+  managed:
+    version: 1
+    planes:
+      standalone:
+        enabled: false
+        auth:
+          requireApiKey: true
+          anonymous: reject
+      runtimeAgent:
+        enabled: true
+        auth:
+          requireApiKey: true
+          anonymous: reject
+        defaultLimit:
+          requests: 2000
+          windowSeconds: 60
+    apiKeys:
+      - id: kong-runtime
+        name: Kong runtime caller
+        keyHash: sha256:replace-with-runtime-key-hash
+        enabled: true
+        scopes: [runtimeAgent]
+        limits:
+          runtimeAgent:
+            requests: 2000
+            windowSeconds: 60
+```
+
+Kong plugin config using a bearer token:
+
+```yaml
+plugins:
+  - name: kong-ollama-agent-router
+    config:
+      node_routers:
+        discovery: static
+        security:
+          auth:
+            type: bearer
+            token: "{vault://env/OAR_RUNTIME_API_KEY}"
+          tls:
+            verify: true
+        nodes:
+          - id: gex44-a
+            base_url: https://gex44-a.local:11435
+            weight: 100
+            tls:
+              server_name: gex44-a.local
+```
+
+`auth.type` supports:
+
+- `none`: send no runtime credential. This is the default for backwards compatibility.
+- `bearer`: send `Authorization: Bearer <token>`.
+- `header`: send the token in a custom header, for example `x-api-key`.
+
+Per-node overrides are supported when different node-routers use different credentials:
+
+```yaml
+node_routers:
+  security:
+    auth:
+      type: bearer
+      token: "{vault://env/OAR_DEFAULT_RUNTIME_API_KEY}"
+  nodes:
+    - id: gex44-a
+      base_url: https://gex44-a.local:11435
+      auth:
+        token: "{vault://env/OAR_GEX44_A_RUNTIME_API_KEY}"
+    - id: gex44-b
+      base_url: https://gex44-b.local:11435
+      auth:
+        type: header
+        header_name: x-api-key
+        token: "{vault://env/OAR_GEX44_B_RUNTIME_API_KEY}"
+```
+
+The plugin never forwards the public client `Authorization` header to node-router. Runtime-agent credentials are generated from plugin configuration only.
+
+TLS options:
+
+```yaml
+node_routers:
+  security:
+    tls:
+      verify: true
+      server_name: node-router.local
+      client_cert:
+        enabled: true
+        cert_path: /etc/kong/certs/kong-runtime-client.crt
+        key_path: /etc/kong/certs/kong-runtime-client.key
+```
+
+`tls.verify: true` should be used in production. If the node-router uses a private CA, configure Kong/OpenResty trust for that CA. `client_cert` makes the plugin present a client certificate to a TLS endpoint that requires it. Runtime-agent authorization should still use an API key unless the node-router or a TLS proxy in front of it explicitly enforces client certificate trust for the runtime-agent plane.
+
 ## Development
 
 Repository layout:
@@ -140,6 +257,7 @@ make build-rock
 make pack-source-rock
 make install-local
 make smoke
+make smoke-secure-runtime
 make smoke-luarocks
 ```
 
@@ -177,6 +295,7 @@ KONG_IMAGE=kong:3.8
 KONG_PROXY_URL=http://127.0.0.1:8000
 NODE_ROUTER_URL=http://127.0.0.1:11435
 NODE_ROUTER_CONFIG=../ollama-node-router/ollama-agent-router.yaml
+NODE_ROUTER_RUNTIME_API_KEY=
 OLLAMA_URL=http://127.0.0.1:11434
 SMOKE_MODEL=qwen2.5-coder:7b
 PLUGIN_INSTALL_MODE=local
@@ -186,6 +305,27 @@ LUAROCKS_SERVER=https://luarocks.org/manifests/grulka
 ```
 
 Use `KEEP_RUNNING=1 make smoke` to leave the Kong container and any node-router process started by the script running after the test.
+
+To run the smoke test against a node-router with the runtime-agent plane protected by a bearer API key:
+
+```bash
+NODE_ROUTER_RUNTIME_API_KEY=runtime-secret make smoke
+```
+
+To run a full secure runtime-agent smoke test that generates a temporary node-router config, disables the standalone plane, requires a `runtimeAgent` API key, configures the Kong plugin with that key, and then verifies Kong can still complete sync and async requests:
+
+```bash
+make smoke-secure-runtime
+```
+
+Useful overrides for the secure smoke test:
+
+```text
+NODE_ROUTER_SECURE_PORT=11436
+KONG_SECURE_PROXY_PORT=8010
+NODE_ROUTER_RUNTIME_API_KEY=<generated if omitted>
+NODE_ROUTER_SECURE_DIR=.tmp/secure-runtime
+```
 
 ## Versioning
 

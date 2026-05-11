@@ -1,4 +1,4 @@
-.PHONY: lint test syntax smoke smoke-luarocks rockspec-lint build-rock pack-source-rock install-local version-check release-patch
+.PHONY: lint test syntax smoke smoke-secure-runtime smoke-luarocks rockspec-lint build-rock pack-source-rock install-local version-check release-patch
 
 ROCKSPEC := kong-plugin-ollama-agent-router-$(shell tr -d '[:space:]' < VERSION)-1.rockspec
 
@@ -27,6 +27,9 @@ install-local:
 
 smoke:
 	bash scripts/smoke-test.sh
+
+smoke-secure-runtime:
+	bash scripts/smoke-secure-runtime.sh
 
 smoke-luarocks:
 	bash scripts/smoke-luarocks.sh

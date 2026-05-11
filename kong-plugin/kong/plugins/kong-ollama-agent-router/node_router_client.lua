@@ -25,8 +25,43 @@ local function join_url(base_url, path)
   return trim_slash(base_url) .. path
 end
 
+local function copy_table(value)
+  local out = {}
+  for key, item in pairs(value or {}) do
+    out[key] = item
+  end
+  return out
+end
+
+local function merge_config(global, local_override)
+  local out = copy_table(global)
+  for key, value in pairs(local_override or {}) do
+    out[key] = value
+  end
+  return out
+end
+
 local function header_json()
   return { ["content-type"] = "application/json", ["accept"] = "application/json" }
+end
+
+local function prefixed_value(prefix, token)
+  token = tostring(token or "")
+  prefix = tostring(prefix or "")
+  if prefix == "" then
+    return token
+  end
+  return prefix .. " " .. token
+end
+
+local function read_file(path)
+  local file, err = io.open(path, "rb")
+  if not file then
+    return nil, err or ("failed to open " .. tostring(path))
+  end
+  local data = file:read("*a")
+  file:close()
+  return data
 end
 
 function _M.new(config, deps)
@@ -35,6 +70,8 @@ function _M.new(config, deps)
     config = config or {},
     http_factory = deps.http_factory,
     json = deps.json or require_json(),
+    ssl = deps.ssl,
+    cert_cache = {},
   }, _M)
 end
 
@@ -54,6 +91,109 @@ function _M:timeout_ms(kind)
     return cfg.snapshot_timeout_ms or 500
   end
   return cfg.request_timeout_ms or 120000
+end
+
+function _M:security_config(node, section)
+  local cfg = self.config.node_routers or {}
+  local global_security = cfg.security or {}
+  local node_security = nil
+  if section == "auth" then
+    node_security = node and node.auth or nil
+  elseif section == "tls" then
+    node_security = node and node.tls or nil
+  end
+  return merge_config(global_security[section] or {}, node_security or {})
+end
+
+function _M:headers_for_node(node)
+  local headers = header_json()
+  local auth = self:security_config(node, "auth")
+  local auth_type = auth.type or "none"
+  if auth_type == "none" then
+    return headers
+  end
+
+  local token = auth.token
+  if token == nil or token == "" then
+    return headers
+  end
+
+  if auth_type == "bearer" then
+    local prefix = auth.header_prefix
+    if prefix == nil or prefix == "" then
+      prefix = "Bearer"
+    end
+    headers["authorization"] = prefixed_value(prefix, token)
+    return headers
+  end
+
+  if auth_type == "header" then
+    headers[auth.header_name or "x-api-key"] = prefixed_value(auth.header_prefix or "", token)
+  end
+  return headers
+end
+
+function _M:request_options(node)
+  local tls = self:security_config(node, "tls")
+  local options = {
+    ssl_verify = tls.verify ~= false,
+  }
+  if tls.server_name and tls.server_name ~= "" then
+    options.ssl_server_name = tls.server_name
+  end
+
+  local client_cert = tls.client_cert or {}
+  if client_cert.enabled then
+    local cert, key, err = self:load_client_cert(client_cert.cert_path, client_cert.key_path)
+    if err then
+      return nil, err
+    end
+    options.ssl_client_cert = cert
+    options.ssl_client_priv_key = key
+  end
+
+  return options
+end
+
+function _M:load_client_cert(cert_path, key_path)
+  if not cert_path or cert_path == "" or not key_path or key_path == "" then
+    return nil, nil, "TLS client certificate requires cert_path and key_path"
+  end
+  local cache_key = cert_path .. "\0" .. key_path
+  local cached = self.cert_cache[cache_key]
+  if cached then
+    return cached.cert, cached.key
+  end
+
+  local ssl = self.ssl
+  if not ssl then
+    local ok
+    ok, ssl = pcall(require, "ngx.ssl")
+    if not ok then
+      return nil, nil, "ngx.ssl is unavailable for TLS client certificate parsing"
+    end
+  end
+
+  local cert_pem, cert_err = read_file(cert_path)
+  if not cert_pem then
+    return nil, nil, cert_err
+  end
+  local key_pem, key_err = read_file(key_path)
+  if not key_pem then
+    return nil, nil, key_err
+  end
+
+  local cert, parse_cert_err = ssl.parse_pem_cert(cert_pem)
+  if not cert then
+    return nil, nil, parse_cert_err or "failed to parse TLS client certificate"
+  end
+  local key, parse_key_err = ssl.parse_pem_priv_key(key_pem)
+  if not key then
+    return nil, nil, parse_key_err or "failed to parse TLS client private key"
+  end
+
+  self.cert_cache[cache_key] = { cert = cert, key = key }
+  return cert, key
 end
 
 function _M:request_json(node, method, path, body, timeout_kind)
@@ -84,10 +224,22 @@ function _M:request_json(node, method, path, body, timeout_kind)
     encoded = json.encode(body)
   end
 
+  local request_options, options_err = self:request_options(node)
+  if not request_options then
+    return nil, options_err
+  end
+  request_options.method = method
+  request_options.body = encoded
+  request_options.headers = self:headers_for_node(node)
+
   local res, err = client:request_uri(join_url(node.base_url, path), {
-    method = method,
-    body = encoded,
-    headers = header_json(),
+    method = request_options.method,
+    body = request_options.body,
+    headers = request_options.headers,
+    ssl_verify = request_options.ssl_verify,
+    ssl_server_name = request_options.ssl_server_name,
+    ssl_client_cert = request_options.ssl_client_cert,
+    ssl_client_priv_key = request_options.ssl_client_priv_key,
   })
   if not res then
     return nil, err or "node-router request failed"
@@ -102,7 +254,14 @@ function _M:request_json(node, method, path, body, timeout_kind)
   end
 
   if res.status < 200 or res.status >= 300 then
-    return nil, decoded.error and decoded.error.message or ("node-router returned HTTP " .. tostring(res.status)), res.status, decoded
+    local message = decoded.error and decoded.error.message or ("node-router returned HTTP " .. tostring(res.status))
+    if res.status == 401 or res.status == 403 then
+      return nil, self:format_node_error(message), 503, decoded
+    end
+    if res.status == 429 then
+      return nil, self:format_node_error(message), 429, decoded
+    end
+    return nil, message, res.status, decoded
   end
 
   return decoded, nil, res.status
@@ -127,13 +286,25 @@ function _M:fetch_nodes()
         runtime = runtime,
       }
     else
-      errors[#errors + 1] = (node.id or node.base_url or "node") .. ": " .. tostring(cap_err or runtime_err)
+      errors[#errors + 1] = (node.id or node.base_url or "node") .. ": " .. self:format_node_error(cap_err or runtime_err)
     end
   end
   if #nodes == 0 then
     return nil, table.concat(errors, "; ") ~= "" and table.concat(errors, "; ") or "no node-router available"
   end
   return nodes
+end
+
+function _M:format_node_error(err)
+  err = tostring(err or "node-router unavailable")
+  local lowered = string.lower(err)
+  if string.find(lowered, "api key") or string.find(lowered, "authentication") or string.find(lowered, "authorization") then
+    return "node-router authentication failed"
+  end
+  if string.find(lowered, "rate limit") then
+    return "node-router rate limited"
+  end
+  return err
 end
 
 function _M:execute(target, request, decision, priority)

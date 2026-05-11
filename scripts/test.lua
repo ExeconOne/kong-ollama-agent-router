@@ -40,6 +40,7 @@ end
 local specs = {
   "spec.unit.classifier_spec",
   "spec.unit.router_engine_spec",
+  "spec.unit.node_router_client_spec",
   "spec.unit.plugin_contract_spec",
 }
 
