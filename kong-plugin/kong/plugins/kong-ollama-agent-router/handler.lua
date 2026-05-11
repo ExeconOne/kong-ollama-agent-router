@@ -4,7 +4,7 @@ local NodeRouterClient = require "kong.plugins.kong-ollama-agent-router.node_rou
 local response = require "kong.plugins.kong-ollama-agent-router.response"
 
 local KongOllamaRouterHandler = {
-  VERSION = "0.1.2",
+  VERSION = "0.1.3",
   PRIORITY = 900,
 }
 
